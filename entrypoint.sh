@@ -3,6 +3,35 @@
 export RUNNER_ALLOW_RUNASROOT=1
 export PATH=$PATH:/actions-runner
 
+echo_config() {
+  # If DEBUG is set to 1, print out the config
+  if [ "${DEBUG}" = "1" ]; then
+    # Change terminal color to green
+    echo -e "\e[1;32m"
+    echo "Runner Configuration"
+    # Print out the runner configuration
+    echo "Name   : ${_RUNNER_NAME}"
+    echo "Workdir: ${_RUNNER_WORKDIR}"
+    echo "Labels : ${_LABELS}"
+    echo "Group  : ${_RUNNER_GROUP}"
+    echo "Scope  : ${RUNNER_SCOPE}"
+    echo "Host   : ${_GITHUB_HOST}"
+    echo "URL    : ${_SHORT_URL}"
+    # If ACCESS_TOKEN_FILE is not set, then we are running in a local environment
+    if [ -z "${ACCESS_TOKEN_FILE}" ]; then
+      echo "Token  : environment"
+    # Otherwise, we are fetching the token from a file
+    elif [ -n "${ACCESS_TOKEN_FILE}" ]; then
+      echo "Token  : ${ACCESS_TOKEN_FILE}"
+    fi
+    # Print ephermeral status
+    echo "Ephem  : ${_RUNNER_EPHEMERAL}"
+    # Change terminal color back to default
+    echo "########################################################################"
+    echo -e "\e[0m"
+  fi
+  }
+
 # Un-export these, so that they must be passed explicitly to the environment of
 # any command that needs them.  This may help prevent leaks.
 export -n ACCESS_TOKEN
@@ -19,7 +48,6 @@ deregister_runner() {
 }
 
 _DISABLE_AUTOMATIC_DEREGISTRATION=${DISABLE_AUTOMATIC_DEREGISTRATION:-false}
-
 _RUNNER_NAME=${RUNNER_NAME:-${RUNNER_NAME_PREFIX:-github-runner}-$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13 ; echo '')}
 _RUNNER_WORKDIR=${RUNNER_WORKDIR:-/_work}
 _LABELS=${LABELS:-default}
@@ -58,7 +86,18 @@ case ${RUNNER_SCOPE} in
     ;;
 esac
 
+# If ACCESS_TOKEN_FILE is set, use it to get the access token
+if [[ -f "${ACCESS_TOKEN_FILE}" ]]; then
+  # Parse the access token from the file with only access_token in it
+  ACCESS_TOKEN=$(cat "${ACCESS_TOKEN_FILE}")
+fi
+
 configure_runner() {
+  # Open the file ACCESS_TOKEN_FILE and read the access token.
+  if [[ -f "${ACCESS_TOKEN_FILE}" ]]; then
+    echo "Reading access token from ${ACCESS_TOKEN_FILE}"
+    ACCESS_TOKEN=$(cat "${ACCESS_TOKEN_FILE}")
+  fi
   if [[ -n "${ACCESS_TOKEN}" ]]; then
     echo "Obtaining the token of the runner"
     _TOKEN=$(ACCESS_TOKEN="${ACCESS_TOKEN}" bash /token.sh)
@@ -89,10 +128,11 @@ configure_runner() {
       --runnergroup "${_RUNNER_GROUP}" \
       --unattended \
       --replace \
-      ${_EPHEMERAL} \
-      ${_AUTO_UPDATE}
+      "${_EPHEMERAL}" \
+      "${_AUTO_UPDATE}"
 }
 
+echo_config
 
 # Opt into runner reusage because a value was given
 if [[ -n "${CONFIGURED_ACTIONS_RUNNER_FILES_DIR}" ]]; then
